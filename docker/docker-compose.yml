@@ -11,7 +11,7 @@ services:
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=erupe
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - ./db-data/:/var/lib/postgresql/
     healthcheck:
@@ -27,7 +27,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: user@pgadmin.com
       PGADMIN_DEFAULT_PASSWORD: password
     ports:
-      - "5050:80"
+      - "15050:80"
     depends_on:
       db:
         condition: service_healthy
@@ -35,11 +35,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    image: ghcr.io/mezeporta/erupe:main
+    # image: ghcr.io/mezeporta/erupe:main
     # To build locally instead of using the prebuilt image, comment out
     # the 'image' line above and uncomment the 'build' section below:
-    # build:
-    #   context: ../
+    build:
+      context: ../
     volumes:
       - ./config.json:/app/config.json
       - ./bin:/app/bin
@@ -47,7 +47,7 @@ services:
     ports:
       # (Make sure these match config.json)
       - "53312:53312" #Sign V1
-      - "8080:8080"   #Sign V2
+      - "18080:8080"   #Sign V2
       - "53310:53310" #Entrance
       # Channels
       - "54001:54001"
