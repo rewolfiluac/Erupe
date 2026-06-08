@@ -1,6 +1,7 @@
 package channelserver
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/jmoiron/sqlx"
@@ -142,5 +143,68 @@ func TestRepoDistributionFiltersByType(t *testing.T) {
 	}
 	if len(dists) != 1 {
 		t.Errorf("Expected 1 distribution of type 1, got: %d", len(dists))
+	}
+}
+
+func TestRepoDistributionGetClaimableReturnsItems(t *testing.T) {
+	repo, db, charID := setupDistributionRepo(t)
+
+	distID := createDistribution(t, db, nil, 1, "HR Gift", "Has items")
+	if _, err := db.Exec("INSERT INTO distribution_items (distribution_id, item_type, item_id, quantity) VALUES ($1, 7, 8142, 10)", distID); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	dist, items, err := repo.GetClaimable(distID, charID, 1)
+	if err != nil {
+		t.Fatalf("GetClaimable failed: %v", err)
+	}
+	if dist.ID != distID {
+		t.Errorf("distribution ID = %d, want %d", dist.ID, distID)
+	}
+	if len(items) != 1 || items[0].ItemType != 7 || items[0].ItemID != 8142 || items[0].Quantity != 10 {
+		t.Fatalf("items = %+v, want one item_type=7 item_id=8142 quantity=10", items)
+	}
+}
+
+func TestRepoDistributionGetClaimableRejectsAccepted(t *testing.T) {
+	repo, db, charID := setupDistributionRepo(t)
+
+	distID := createDistribution(t, db, nil, 1, "Once", "Has items")
+	if _, err := db.Exec("INSERT INTO distribution_items (distribution_id, item_type, item_id, quantity) VALUES ($1, 7, 8142, 10)", distID); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	if err := repo.RecordAccepted(distID, charID); err != nil {
+		t.Fatalf("RecordAccepted failed: %v", err)
+	}
+
+	_, _, err := repo.GetClaimable(distID, charID, 1)
+	if !errors.Is(err, errDistributionNotClaimable) {
+		t.Fatalf("GetClaimable error = %v, want errDistributionNotClaimable", err)
+	}
+}
+
+func TestRepoDistributionGetClaimableRejectsWrongCharacter(t *testing.T) {
+	repo, db, charID := setupDistributionRepo(t)
+
+	otherCharID := charID + 1000
+	distID := createDistribution(t, db, &otherCharID, 1, "Other", "Not yours")
+	if _, err := db.Exec("INSERT INTO distribution_items (distribution_id, item_type, item_id, quantity) VALUES ($1, 7, 8142, 10)", distID); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	_, _, err := repo.GetClaimable(distID, charID, 1)
+	if !errors.Is(err, errDistributionNotClaimable) {
+		t.Fatalf("GetClaimable error = %v, want errDistributionNotClaimable", err)
+	}
+}
+
+func TestRepoDistributionGetClaimableRequiresItems(t *testing.T) {
+	repo, db, charID := setupDistributionRepo(t)
+
+	distID := createDistribution(t, db, nil, 1, "Empty", "No items")
+
+	_, _, err := repo.GetClaimable(distID, charID, 1)
+	if !errors.Is(err, errDistributionNotClaimable) {
+		t.Fatalf("GetClaimable error = %v, want errDistributionNotClaimable", err)
 	}
 }

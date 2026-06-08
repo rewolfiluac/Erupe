@@ -1,8 +1,15 @@
 package channelserver
 
 import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+
 	"github.com/jmoiron/sqlx"
 )
+
+var errDistributionNotClaimable = errors.New("distribution is not claimable")
 
 // DistributionRepository centralizes all database access for the distribution,
 // distribution_items, and distributions_accepted tables.
@@ -28,7 +35,7 @@ func (r *DistributionRepository) List(charID uint32, distType uint8) ([]Distribu
 		) AS times_accepted,
 		COALESCE(deadline, TO_TIMESTAMP(0)) AS deadline
 		FROM distribution d
-		WHERE character_id = $1 AND type = $2 OR character_id IS NULL AND type = $2 ORDER BY id DESC
+		WHERE (character_id = $1 OR character_id IS NULL) AND type = $2 ORDER BY id DESC
 	`, charID, distType)
 	if err != nil {
 		return nil, err
@@ -44,6 +51,44 @@ func (r *DistributionRepository) List(charID uint32, distType uint8) ([]Distribu
 		dists = append(dists, d)
 	}
 	return dists, nil
+}
+
+// GetClaimable returns a distribution and its items if the character may claim it.
+func (r *DistributionRepository) GetClaimable(distributionID, charID uint32, distType uint8) (Distribution, []DistributionItem, error) {
+	var dist Distribution
+	err := r.db.QueryRowx(`
+		SELECT d.id, event_name, description, COALESCE(rights, 0) AS rights, COALESCE(selection, false) AS selection, times_acceptable,
+		COALESCE(min_hr, -1) AS min_hr, COALESCE(max_hr, -1) AS max_hr,
+		COALESCE(min_sr, -1) AS min_sr, COALESCE(max_sr, -1) AS max_sr,
+		COALESCE(min_gr, -1) AS min_gr, COALESCE(max_gr, -1) AS max_gr,
+		(
+			SELECT count(*) FROM distributions_accepted da
+			WHERE d.id = da.distribution_id AND da.character_id = $2
+		) AS times_accepted,
+		COALESCE(deadline, TO_TIMESTAMP(0)) AS deadline
+		FROM distribution d
+		WHERE d.id = $1 AND (d.character_id = $2 OR d.character_id IS NULL) AND d.type = $3
+	`, distributionID, charID, distType).StructScan(&dist)
+	if errors.Is(err, sql.ErrNoRows) {
+		return dist, nil, errDistributionNotClaimable
+	}
+	if err != nil {
+		return dist, nil, err
+	}
+	if dist.TimesAccepted >= dist.TimesAcceptable {
+		return dist, nil, fmt.Errorf("%w: already accepted", errDistributionNotClaimable)
+	}
+	if !dist.Deadline.IsZero() && dist.Deadline.After(time.Unix(0, 0)) && dist.Deadline.Before(time.Now()) {
+		return dist, nil, fmt.Errorf("%w: deadline passed", errDistributionNotClaimable)
+	}
+	items, err := r.GetItems(distributionID)
+	if err != nil {
+		return dist, nil, err
+	}
+	if len(items) == 0 {
+		return dist, nil, fmt.Errorf("%w: no items", errDistributionNotClaimable)
+	}
+	return dist, items, nil
 }
 
 // GetItems returns all items for a given distribution.

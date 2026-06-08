@@ -1,11 +1,14 @@
 package channelserver
 
 import (
+	"fmt"
+	"time"
+
 	"erupe-ce/common/byteframe"
+	"erupe-ce/common/mhfitem"
 	ps "erupe-ce/common/pascalstring"
 	cfg "erupe-ce/config"
 	"erupe-ce/network/mhfpacket"
-	"time"
 
 	"go.uber.org/zap"
 )
@@ -129,44 +132,164 @@ func handleMsgMhfApplyDistItem(s *Session, p mhfpacket.MHFPacket) {
 
 func handleMsgMhfAcquireDistItem(s *Session, p mhfpacket.MHFPacket) {
 	pkt := p.(*mhfpacket.MsgMhfAcquireDistItem)
-	if pkt.DistributionID > 0 {
-		err := s.server.distRepo.RecordAccepted(pkt.DistributionID, s.charID)
-		if err == nil {
-			distItems, err := s.server.distRepo.GetItems(pkt.DistributionID)
-			if err != nil {
-				s.logger.Error("Failed to get distribution items for acquisition", zap.Error(err))
-			}
-			for _, item := range distItems {
-				switch item.ItemType {
-				case 17:
-					if err := addPointNetcafe(s, int(item.Quantity)); err != nil {
-						s.logger.Error("Failed to add dist item netcafe points", zap.Error(err))
-					}
-				case 19:
-					if err := s.server.userRepo.AddPremiumCoins(s.userID, item.Quantity); err != nil {
-						s.logger.Error("Failed to update gacha premium", zap.Error(err))
-					}
-				case 20:
-					if err := s.server.userRepo.AddTrialCoins(s.userID, item.Quantity); err != nil {
-						s.logger.Error("Failed to update gacha trial", zap.Error(err))
-					}
-				case 21:
-					if err := s.server.userRepo.AddFrontierPoints(s.userID, item.Quantity); err != nil {
-						s.logger.Error("Failed to update frontier points", zap.Error(err))
-					}
-				case 23:
-					saveData, err := GetCharacterSaveData(s, s.charID)
-					if err == nil {
-						saveData.RP += uint16(item.Quantity)
-						if err := saveData.Save(s); err != nil {
-							s.logger.Error("Failed to save RP from dist item", zap.Error(err))
-						}
-					}
-				}
-			}
+
+	if pkt.DistributionID == 0 {
+		doAckSimpleFail(s, pkt.AckHandle, make([]byte, 4))
+		return
+	}
+
+	dist, distItems, err := s.server.distRepo.GetClaimable(pkt.DistributionID, s.charID, pkt.DistributionType)
+	if err != nil {
+		s.logger.Warn("Distribution is not claimable",
+			zap.Uint32("distribution_id", pkt.DistributionID),
+			zap.Uint8("distribution_type", pkt.DistributionType),
+			zap.Error(err),
+		)
+		doAckSimpleFail(s, pkt.AckHandle, make([]byte, 4))
+		return
+	}
+
+	hr, gr, err := distributionCharacterRanks(s)
+	if err != nil {
+		s.logger.Error("Failed to load character ranks for distribution claim", zap.Error(err))
+		doAckSimpleFail(s, pkt.AckHandle, make([]byte, 4))
+		return
+	}
+	if err := distributionRankAllowed(dist, hr, gr); err != nil {
+		s.logger.Warn("Distribution rank check failed",
+			zap.Uint32("distribution_id", pkt.DistributionID),
+			zap.Uint16("hr", hr),
+			zap.Uint16("gr", gr),
+			zap.Error(err),
+		)
+		doAckSimpleFail(s, pkt.AckHandle, make([]byte, 4))
+		return
+	}
+
+	for _, item := range distItems {
+		if err := grantDistributionItem(s, item); err != nil {
+			s.logger.Error("Failed to grant distribution item",
+				zap.Uint32("distribution_id", pkt.DistributionID),
+				zap.Uint8("item_type", item.ItemType),
+				zap.Uint32("item_id", item.ItemID),
+				zap.Uint32("quantity", item.Quantity),
+				zap.Error(err),
+			)
+			doAckSimpleFail(s, pkt.AckHandle, make([]byte, 4))
+			return
 		}
 	}
+
+	if err := s.server.distRepo.RecordAccepted(pkt.DistributionID, s.charID); err != nil {
+		s.logger.Error("Failed to record accepted distribution", zap.Error(err))
+		doAckSimpleFail(s, pkt.AckHandle, make([]byte, 4))
+		return
+	}
+
 	doAckSimpleSucceed(s, pkt.AckHandle, make([]byte, 4))
+}
+
+func distributionCharacterRanks(s *Session) (uint16, uint16, error) {
+	hr, err := s.server.charRepo.ReadInt(s.charID, "hr")
+	if err != nil {
+		return 0, 0, fmt.Errorf("read HR: %w", err)
+	}
+	gr, err := s.server.charRepo.ReadInt(s.charID, "gr")
+	if err != nil {
+		return 0, 0, fmt.Errorf("read GR: %w", err)
+	}
+	return uint16(hr), uint16(gr), nil
+}
+
+func distributionRankAllowed(dist Distribution, hr, gr uint16) error {
+	if dist.MinHR >= 0 && hr < uint16(dist.MinHR) {
+		return fmt.Errorf("HR %d below minimum %d", hr, dist.MinHR)
+	}
+	if dist.MaxHR >= 0 && hr > uint16(dist.MaxHR) {
+		return fmt.Errorf("HR %d above maximum %d", hr, dist.MaxHR)
+	}
+	if dist.MinGR >= 0 && gr < uint16(dist.MinGR) {
+		return fmt.Errorf("GR %d below minimum %d", gr, dist.MinGR)
+	}
+	if dist.MaxGR >= 0 && gr > uint16(dist.MaxGR) {
+		return fmt.Errorf("GR %d above maximum %d", gr, dist.MaxGR)
+	}
+	if dist.MinSR >= 0 || dist.MaxSR >= 0 {
+		return fmt.Errorf("SR-gated distributions are not supported")
+	}
+	return nil
+}
+
+func grantDistributionItem(s *Session, item DistributionItem) error {
+	switch item.ItemType {
+	case 0, 1, 2, 3, 4, 5, 6:
+		if item.ItemID == 0 || item.ItemID > 0xffff || item.Quantity == 0 || item.Quantity > 0xffff {
+			return fmt.Errorf("invalid equipment reward item_type=%d item_id=%d quantity=%d", item.ItemType, item.ItemID, item.Quantity)
+		}
+		for i := uint32(0); i < item.Quantity; i++ {
+			if err := addWarehouseEquipmentErr(s, newDistributionEquipment(item.ItemType, uint16(item.ItemID))); err != nil {
+				return fmt.Errorf("add equipment to gift box: %w", err)
+			}
+		}
+	case 7:
+		if item.ItemID == 0 || item.ItemID > 0xffff || item.Quantity == 0 || item.Quantity > 0xffff {
+			return fmt.Errorf("invalid item reward item_id=%d quantity=%d", item.ItemID, item.Quantity)
+		}
+		if err := addWarehouseItemErr(s, mhfitem.MHFItemStack{
+			Item:     mhfitem.MHFItem{ItemID: uint16(item.ItemID)},
+			Quantity: uint16(item.Quantity),
+		}); err != nil {
+			return fmt.Errorf("add item to gift box: %w", err)
+		}
+	case 17:
+		if err := addPointNetcafe(s, int(item.Quantity)); err != nil {
+			return fmt.Errorf("add netcafe points: %w", err)
+		}
+	case 19:
+		if err := s.server.userRepo.AddPremiumCoins(s.userID, item.Quantity); err != nil {
+			return fmt.Errorf("add premium coins: %w", err)
+		}
+	case 20:
+		if err := s.server.userRepo.AddTrialCoins(s.userID, item.Quantity); err != nil {
+			return fmt.Errorf("add trial coins: %w", err)
+		}
+	case 21:
+		if err := s.server.userRepo.AddFrontierPoints(s.userID, item.Quantity); err != nil {
+			return fmt.Errorf("add frontier points: %w", err)
+		}
+	case 23:
+		if item.Quantity > 0xffff {
+			return fmt.Errorf("RP quantity too large: %d", item.Quantity)
+		}
+		saveData, err := GetCharacterSaveData(s, s.charID)
+		if err != nil {
+			return fmt.Errorf("load savedata for RP: %w", err)
+		}
+		saveData.RP += uint16(item.Quantity)
+		if err := saveData.Save(s); err != nil {
+			return fmt.Errorf("save RP: %w", err)
+		}
+	case 30, 31:
+		// The client unlocks extra item/equipment box pages from the claim result.
+		// Warehouse storage is already provisioned server-side.
+	default:
+		return fmt.Errorf("unsupported distribution item type: %d", item.ItemType)
+	}
+	return nil
+}
+
+func newDistributionEquipment(itemType uint8, itemID uint16) mhfitem.MHFEquipment {
+	equipment := mhfitem.MHFEquipment{
+		ItemType:    itemType,
+		ItemID:      itemID,
+		Level:       1,
+		Decorations: make([]mhfitem.MHFItem, 3),
+		Sigils:      make([]mhfitem.MHFSigil, 3),
+	}
+	for i := range equipment.Sigils {
+		equipment.Sigils[i].Effects = make([]mhfitem.MHFSigilEffect, 3)
+	}
+	return equipment
 }
 
 func handleMsgMhfGetDistDescription(s *Session, p mhfpacket.MHFPacket) {

@@ -276,6 +276,7 @@ type StampRepo interface {
 // DistributionRepo defines the contract for distribution/event item data access.
 type DistributionRepo interface {
 	List(charID uint32, distType uint8) ([]Distribution, error)
+	GetClaimable(distributionID, charID uint32, distType uint8) (Distribution, []DistributionItem, error)
 	GetItems(distributionID uint32) ([]DistributionItem, error)
 	RecordAccepted(distributionID, charID uint32) error
 	GetDescription(distributionID uint32) (string, error)
