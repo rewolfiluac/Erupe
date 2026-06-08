@@ -14,10 +14,7 @@ BEGIN
 
     IF dist_id IS NULL THEN
         INSERT INTO distribution (type, event_name, description, times_acceptable, min_hr, max_hr)
-        VALUES (1, 'HR5突破の褒賞品', $desc$~C05このイベント報酬を受け取るには、
-下記の条件を満たしている必要があります。
-
-HR5を突破したハンターにギルドからの褒賞品です！
+        VALUES (1, 'HR5突破の褒賞品', $desc$~C05HR5を突破したハンターにギルドからの褒賞品です！
 
 剛種武器は、武具工房の親方に話しかけて
 「武器加工」＞「剛種武器生産」から作りたい武器種を

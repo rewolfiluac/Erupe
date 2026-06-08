@@ -1,4 +1,4 @@
--- Align the HR5 guide reward message with the official server screenshot.
+-- Remove the client-provided event reward condition notice from the stored HR5 description.
 UPDATE distribution
 SET description = $desc$~C05HR5を突破したハンターにギルドからの褒賞品です！
 
