@@ -825,7 +825,7 @@ func TestAuthenticate_RegisterTokenError(t *testing.T) {
 		credUID:      42,
 		credPassword: hash,
 		lastLogin:    time.Now(),
-		returnExpiry: time.Now().Add(time.Hour * 24 * 30),
+		returnExpiry: timePtr(time.Now().Add(time.Hour * 24 * 30)),
 	}
 	charRepo := &mockSignCharacterRepo{
 		characters: []character{{ID: 1, Name: "Char"}},

@@ -153,7 +153,7 @@ func TestLoginEndpoint_Success(t *testing.T) {
 			credentialsPassword: string(hash),
 			credentialsRights:   30,
 			lastLogin:           time.Now(),
-			returnExpiry:        time.Now().Add(time.Hour * 24 * 30),
+			returnExpiry:        timePtr(time.Now().Add(time.Hour * 24 * 30)),
 		},
 		sessionRepo: &mockAPISessionRepo{
 			createTokenID: 42,
@@ -234,7 +234,7 @@ func TestLoginEndpoint_WrongPassword(t *testing.T) {
 			credentialsID:       1,
 			credentialsPassword: string(hash),
 			lastLogin:           time.Now(),
-			returnExpiry:        time.Now().Add(time.Hour * 24 * 30),
+			returnExpiry:        timePtr(time.Now().Add(time.Hour * 24 * 30)),
 		},
 	}
 
@@ -269,7 +269,7 @@ func TestRegisterEndpoint_Success(t *testing.T) {
 			registerID:     1,
 			registerRights: 30,
 			lastLogin:      time.Now(),
-			returnExpiry:   time.Now().Add(time.Hour * 24 * 30),
+			returnExpiry:   timePtr(time.Now().Add(time.Hour * 24 * 30)),
 		},
 		sessionRepo: &mockAPISessionRepo{
 			createTokenID: 10,

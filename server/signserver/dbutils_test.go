@@ -413,7 +413,7 @@ func TestGetReturnExpiry(t *testing.T) {
 	recentLogin := time.Now().Add(-time.Hour * 24)
 	userRepo := &mockSignUserRepo{
 		lastLogin:    recentLogin,
-		returnExpiry: time.Now().Add(time.Hour * 24 * 30),
+		returnExpiry: timePtr(time.Now().Add(time.Hour * 24 * 30)),
 	}
 
 	server := &Server{
@@ -425,6 +425,30 @@ func TestGetReturnExpiry(t *testing.T) {
 	expiry := server.getReturnExpiry(1)
 	if expiry.Before(time.Now()) {
 		t.Error("getReturnExpiry() should return future date")
+	}
+	if !userRepo.updateLastLoginCalled {
+		t.Error("getReturnExpiry() should update last login")
+	}
+}
+
+func TestGetReturnExpiryRecentLoginWithoutReturnRight(t *testing.T) {
+	recentLogin := time.Now().Add(-time.Hour * 24)
+	userRepo := &mockSignUserRepo{
+		lastLogin: recentLogin,
+	}
+
+	server := &Server{
+		logger:      zap.NewNop(),
+		erupeConfig: &cfg.Config{},
+		userRepo:    userRepo,
+	}
+
+	expiry := server.getReturnExpiry(1)
+	if expiry.After(time.Now().Add(time.Minute)) {
+		t.Error("getReturnExpiry() should not return a future return right for recent users")
+	}
+	if userRepo.updateReturnExpiryCalled {
+		t.Error("getReturnExpiry() should not update return expiry for recent users without return rights")
 	}
 	if !userRepo.updateLastLoginCalled {
 		t.Error("getReturnExpiry() should update last login")
@@ -472,8 +496,8 @@ func TestGetReturnExpiryDBError(t *testing.T) {
 	if expiry.IsZero() {
 		t.Error("getReturnExpiry() should return non-zero time even on error")
 	}
-	if !userRepo.updateReturnExpiryCalled {
-		t.Error("getReturnExpiry() should update return expiry on fallback")
+	if userRepo.updateReturnExpiryCalled {
+		t.Error("getReturnExpiry() should not create return rights on fallback")
 	}
 }
 
@@ -572,6 +596,9 @@ func TestRegisterDBAccount(t *testing.T) {
 	}
 	if !userRepo.registered {
 		t.Error("registerDBAccount() should call Register")
+	}
+	if userRepo.registerReturnExpires != nil {
+		t.Error("registerDBAccount() should create users without return expiry")
 	}
 }
 

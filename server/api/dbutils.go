@@ -16,7 +16,7 @@ func (s *APIServer) createNewUser(ctx context.Context, username string, password
 	if err != nil {
 		return 0, 0, err
 	}
-	return s.userRepo.Register(ctx, username, string(passwordHash), time.Now().Add(time.Hour*24*30))
+	return s.userRepo.Register(ctx, username, string(passwordHash), nil)
 }
 
 func (s *APIServer) createLoginToken(ctx context.Context, uid uint32) (uint32, string, error) {
@@ -66,21 +66,24 @@ func (s *APIServer) getCharactersForUser(ctx context.Context, uid uint32) ([]Cha
 }
 
 func (s *APIServer) getReturnExpiry(uid uint32) time.Time {
-	lastLogin, _ := s.userRepo.GetLastLogin(uid)
-	var returnExpiry time.Time
-	if time.Now().Add((time.Hour * 24) * -90).After(lastLogin) {
-		returnExpiry = time.Now().Add(time.Hour * 24 * 30)
-		_ = s.userRepo.UpdateReturnExpiry(uid, returnExpiry)
-	} else {
-		var err error
-		returnExpiry, err = s.userRepo.GetReturnExpiry(uid)
-		if err != nil {
-			returnExpiry = time.Now()
-			_ = s.userRepo.UpdateReturnExpiry(uid, returnExpiry)
-		}
+	now := time.Now()
+	lastLogin, err := s.userRepo.GetLastLogin(uid)
+	if err != nil {
+		lastLogin = now
 	}
-	_ = s.userRepo.UpdateLastLogin(uid, time.Now())
-	return returnExpiry
+	if now.Add((time.Hour * 24) * -90).After(lastLogin) {
+		returnExpiry := now.Add(time.Hour * 24 * 30)
+		_ = s.userRepo.UpdateReturnExpiry(uid, returnExpiry)
+		_ = s.userRepo.UpdateLastLogin(uid, now)
+		return returnExpiry
+	}
+
+	returnExpiry, _ := s.userRepo.GetReturnExpiry(uid)
+	_ = s.userRepo.UpdateLastLogin(uid, now)
+	if returnExpiry != nil && returnExpiry.After(now) {
+		return *returnExpiry
+	}
+	return now
 }
 
 func (s *APIServer) exportSave(ctx context.Context, uid uint32, cid uint32) (map[string]interface{}, error) {

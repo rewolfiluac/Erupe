@@ -34,13 +34,13 @@ type SaveBlobs struct {
 // APIUserRepo defines the contract for user-related data access.
 type APIUserRepo interface {
 	// Register creates a new user and returns their ID and rights.
-	Register(ctx context.Context, username, passwordHash string, returnExpires time.Time) (id uint32, rights uint32, err error)
+	Register(ctx context.Context, username, passwordHash string, returnExpires *time.Time) (id uint32, rights uint32, err error)
 	// GetCredentials returns the user's ID, password hash, and rights.
 	GetCredentials(ctx context.Context, username string) (id uint32, passwordHash string, rights uint32, err error)
 	// GetLastLogin returns the user's last login time.
 	GetLastLogin(uid uint32) (time.Time, error)
 	// GetReturnExpiry returns the user's return expiry time.
-	GetReturnExpiry(uid uint32) (time.Time, error)
+	GetReturnExpiry(uid uint32) (*time.Time, error)
 	// UpdateReturnExpiry sets the user's return expiry time.
 	UpdateReturnExpiry(uid uint32, expiry time.Time) error
 	// UpdateLastLogin sets the user's last login time.

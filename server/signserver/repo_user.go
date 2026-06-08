@@ -23,7 +23,7 @@ func (r *SignUserRepository) GetCredentials(username string) (uint32, string, er
 	return uid, passwordHash, err
 }
 
-func (r *SignUserRepository) Register(username, passwordHash string, returnExpires time.Time) (uint32, error) {
+func (r *SignUserRepository) Register(username, passwordHash string, returnExpires *time.Time) (uint32, error) {
 	var uid uint32
 	err := r.db.QueryRow(
 		"INSERT INTO users (username, password, return_expires) VALUES ($1, $2, $3) RETURNING id",
@@ -50,8 +50,8 @@ func (r *SignUserRepository) GetLastLogin(uid uint32) (time.Time, error) {
 	return lastLogin, err
 }
 
-func (r *SignUserRepository) GetReturnExpiry(uid uint32) (time.Time, error) {
-	var expiry time.Time
+func (r *SignUserRepository) GetReturnExpiry(uid uint32) (*time.Time, error) {
+	var expiry *time.Time
 	err := r.db.Get(&expiry, "SELECT return_expires FROM users WHERE id=$1", uid)
 	return expiry, err
 }

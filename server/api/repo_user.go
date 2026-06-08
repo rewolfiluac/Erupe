@@ -17,7 +17,7 @@ func NewAPIUserRepository(db *sqlx.DB) *APIUserRepository {
 	return &APIUserRepository{db: db}
 }
 
-func (r *APIUserRepository) Register(ctx context.Context, username, passwordHash string, returnExpires time.Time) (uint32, uint32, error) {
+func (r *APIUserRepository) Register(ctx context.Context, username, passwordHash string, returnExpires *time.Time) (uint32, uint32, error) {
 	var (
 		id     uint32
 		rights uint32
@@ -49,8 +49,8 @@ func (r *APIUserRepository) GetLastLogin(uid uint32) (time.Time, error) {
 	return lastLogin, err
 }
 
-func (r *APIUserRepository) GetReturnExpiry(uid uint32) (time.Time, error) {
-	var returnExpiry time.Time
+func (r *APIUserRepository) GetReturnExpiry(uid uint32) (*time.Time, error) {
+	var returnExpiry *time.Time
 	err := r.db.Get(&returnExpiry, "SELECT return_expires FROM users WHERE id=$1", uid)
 	return returnExpiry, err
 }

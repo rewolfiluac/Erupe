@@ -8,6 +8,10 @@ import (
 // errMockDB is a sentinel for mock repo error injection.
 var errMockDB = errors.New("mock database error")
 
+func timePtr(t time.Time) *time.Time {
+	return &t
+}
+
 // --- mockSignUserRepo ---
 
 type mockSignUserRepo struct {
@@ -17,9 +21,10 @@ type mockSignUserRepo struct {
 	credErr      error
 
 	// Register
-	registerUID uint32
-	registerErr error
-	registered  bool
+	registerUID           uint32
+	registerErr           error
+	registered            bool
+	registerReturnExpires *time.Time
 
 	// GetRights
 	rights    uint32
@@ -34,7 +39,7 @@ type mockSignUserRepo struct {
 	lastLoginErr error
 
 	// GetReturnExpiry
-	returnExpiry    time.Time
+	returnExpiry    *time.Time
 	returnExpiryErr error
 
 	// UpdateReturnExpiry
@@ -82,8 +87,9 @@ func (m *mockSignUserRepo) GetCredentials(username string) (uint32, string, erro
 	return m.credUID, m.credPassword, m.credErr
 }
 
-func (m *mockSignUserRepo) Register(username, passwordHash string, returnExpires time.Time) (uint32, error) {
+func (m *mockSignUserRepo) Register(username, passwordHash string, returnExpires *time.Time) (uint32, error) {
 	m.registered = true
+	m.registerReturnExpires = returnExpires
 	return m.registerUID, m.registerErr
 }
 
@@ -99,7 +105,7 @@ func (m *mockSignUserRepo) GetLastLogin(uid uint32) (time.Time, error) {
 	return m.lastLogin, m.lastLoginErr
 }
 
-func (m *mockSignUserRepo) GetReturnExpiry(uid uint32) (time.Time, error) {
+func (m *mockSignUserRepo) GetReturnExpiry(uid uint32) (*time.Time, error) {
 	return m.returnExpiry, m.returnExpiryErr
 }
 

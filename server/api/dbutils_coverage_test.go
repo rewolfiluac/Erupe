@@ -12,13 +12,14 @@ func TestCreateNewUser_Success(t *testing.T) {
 	logger := NewTestLogger(t)
 	c := NewTestConfig()
 
+	userRepo := &mockAPIUserRepo{
+		registerID:     1,
+		registerRights: 30,
+	}
 	server := &APIServer{
 		logger:      logger,
 		erupeConfig: c,
-		userRepo: &mockAPIUserRepo{
-			registerID:     1,
-			registerRights: 30,
-		},
+		userRepo:    userRepo,
 	}
 
 	uid, rights, err := server.createNewUser(context.Background(), "testuser", "password123")
@@ -30,6 +31,9 @@ func TestCreateNewUser_Success(t *testing.T) {
 	}
 	if rights != 30 {
 		t.Errorf("rights = %d, want 30", rights)
+	}
+	if userRepo.registerExpiry != nil {
+		t.Error("createNewUser should create users without return expiry")
 	}
 }
 
@@ -284,13 +288,35 @@ func TestGetReturnExpiry_RecentLogin(t *testing.T) {
 		erupeConfig: c,
 		userRepo: &mockAPIUserRepo{
 			lastLogin:    time.Now(),
-			returnExpiry: time.Now().Add(time.Hour * 24 * 15),
+			returnExpiry: timePtr(time.Now().Add(time.Hour * 24 * 15)),
 		},
 	}
 
 	expiry := server.getReturnExpiry(1)
 	if expiry.IsZero() {
 		t.Error("expiry should not be zero")
+	}
+}
+
+func TestGetReturnExpiry_RecentLoginNoReturnRight(t *testing.T) {
+	logger := NewTestLogger(t)
+	c := NewTestConfig()
+	userRepo := &mockAPIUserRepo{
+		lastLogin: time.Now(),
+	}
+
+	server := &APIServer{
+		logger:      logger,
+		erupeConfig: c,
+		userRepo:    userRepo,
+	}
+
+	expiry := server.getReturnExpiry(1)
+	if expiry.After(time.Now().Add(time.Minute)) {
+		t.Error("expiry should not be a future return right for recent users")
+	}
+	if userRepo.updateReturnExpiryCalled {
+		t.Error("expiry should not update return expiry for recent users without return rights")
 	}
 }
 
@@ -303,7 +329,7 @@ func TestGetReturnExpiry_OldLogin(t *testing.T) {
 		erupeConfig: c,
 		userRepo: &mockAPIUserRepo{
 			lastLogin:    time.Now().Add(-time.Hour * 24 * 100), // 100 days ago
-			returnExpiry: time.Now().Add(time.Hour * 24 * 30),
+			returnExpiry: timePtr(time.Now().Add(time.Hour * 24 * 30)),
 		},
 	}
 

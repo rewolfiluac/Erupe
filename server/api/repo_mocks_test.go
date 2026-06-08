@@ -5,11 +5,16 @@ import (
 	"time"
 )
 
+func timePtr(t time.Time) *time.Time {
+	return &t
+}
+
 // mockAPIUserRepo implements APIUserRepo for testing.
 type mockAPIUserRepo struct {
 	registerID     uint32
 	registerRights uint32
 	registerErr    error
+	registerExpiry *time.Time
 
 	credentialsID       uint32
 	credentialsPassword string
@@ -19,14 +24,16 @@ type mockAPIUserRepo struct {
 	lastLogin    time.Time
 	lastLoginErr error
 
-	returnExpiry    time.Time
+	returnExpiry    *time.Time
 	returnExpiryErr error
 
-	updateReturnExpiryErr error
-	updateLastLoginErr    error
+	updateReturnExpiryErr    error
+	updateReturnExpiryCalled bool
+	updateLastLoginErr       error
 }
 
-func (m *mockAPIUserRepo) Register(_ context.Context, _, _ string, _ time.Time) (uint32, uint32, error) {
+func (m *mockAPIUserRepo) Register(_ context.Context, _, _ string, returnExpires *time.Time) (uint32, uint32, error) {
+	m.registerExpiry = returnExpires
 	return m.registerID, m.registerRights, m.registerErr
 }
 
@@ -38,11 +45,12 @@ func (m *mockAPIUserRepo) GetLastLogin(_ uint32) (time.Time, error) {
 	return m.lastLogin, m.lastLoginErr
 }
 
-func (m *mockAPIUserRepo) GetReturnExpiry(_ uint32) (time.Time, error) {
+func (m *mockAPIUserRepo) GetReturnExpiry(_ uint32) (*time.Time, error) {
 	return m.returnExpiry, m.returnExpiryErr
 }
 
 func (m *mockAPIUserRepo) UpdateReturnExpiry(_ uint32, _ time.Time) error {
+	m.updateReturnExpiryCalled = true
 	return m.updateReturnExpiryErr
 }
 

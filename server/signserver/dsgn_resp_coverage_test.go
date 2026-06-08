@@ -242,7 +242,7 @@ func TestMakeSignResponse_GuildmatesOverflow(t *testing.T) {
 		guildmates: guildmates,
 	}
 	server.userRepo = &mockSignUserRepo{
-		returnExpiry: time.Now().Add(time.Hour * 24 * 30),
+		returnExpiry: timePtr(time.Now().Add(time.Hour * 24 * 30)),
 		lastLogin:    time.Now(),
 	}
 

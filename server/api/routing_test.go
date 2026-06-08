@@ -61,7 +61,7 @@ func TestV2LoginRoute(t *testing.T) {
 			credentialsPassword: string(hash),
 			credentialsRights:   30,
 			lastLogin:           time.Now(),
-			returnExpiry:        time.Now().Add(time.Hour * 24 * 30),
+			returnExpiry:        timePtr(time.Now().Add(time.Hour * 24 * 30)),
 		},
 		sessionRepo: &mockAPISessionRepo{createTokenID: 1},
 		charRepo:    &mockAPICharacterRepo{characters: []Character{}},

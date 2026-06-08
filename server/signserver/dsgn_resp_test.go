@@ -23,7 +23,7 @@ func newMakeSignResponseServer(config *cfg.Config) *Server {
 			guildmates: nil,
 		},
 		userRepo: &mockSignUserRepo{
-			returnExpiry: time.Now().Add(time.Hour * 24 * 30),
+			returnExpiry: timePtr(time.Now().Add(time.Hour * 24 * 30)),
 			lastLogin:    time.Now(),
 		},
 		sessionRepo: &mockSignSessionRepo{
@@ -284,7 +284,7 @@ func TestMakeSignResponse_PSNClientWritesPSNID(t *testing.T) {
 		characters: []character{{ID: 1, Name: "PSNHunter", HR: 50}},
 	}
 	server.userRepo = &mockSignUserRepo{
-		returnExpiry: time.Now().Add(time.Hour * 24 * 30),
+		returnExpiry: timePtr(time.Now().Add(time.Hour * 24 * 30)),
 		lastLogin:    time.Now(),
 		psnIDForUser: "MyPSNID",
 	}

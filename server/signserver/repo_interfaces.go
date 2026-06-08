@@ -28,11 +28,11 @@ type members struct {
 // SignUserRepo defines the contract for user-related data access (users, bans tables).
 type SignUserRepo interface {
 	GetCredentials(username string) (uid uint32, passwordHash string, err error)
-	Register(username, passwordHash string, returnExpires time.Time) (uint32, error)
+	Register(username, passwordHash string, returnExpires *time.Time) (uint32, error)
 	GetRights(uid uint32) (uint32, error)
 	GetLastCharacter(uid uint32) (uint32, error)
 	GetLastLogin(uid uint32) (time.Time, error)
-	GetReturnExpiry(uid uint32) (time.Time, error)
+	GetReturnExpiry(uid uint32) (*time.Time, error)
 	UpdateReturnExpiry(uid uint32, expiry time.Time) error
 	UpdateLastLogin(uid uint32, loginTime time.Time) error
 	CountPermanentBans(uid uint32) (int, error)

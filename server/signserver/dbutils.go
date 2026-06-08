@@ -34,7 +34,7 @@ func (s *Server) registerDBAccount(username string, password string) (uint32, er
 		return 0, err
 	}
 
-	uid, err := s.userRepo.Register(username, string(passwordHash), time.Now().Add(time.Hour*24*30))
+	uid, err := s.userRepo.Register(username, string(passwordHash), nil)
 	if err != nil {
 		return 0, err
 	}
@@ -47,30 +47,34 @@ func (s *Server) getCharactersForUser(uid uint32) ([]character, error) {
 }
 
 func (s *Server) getReturnExpiry(uid uint32) time.Time {
-	var returnExpiry time.Time
+	now := time.Now()
 	lastLogin, err := s.userRepo.GetLastLogin(uid)
 	if err != nil {
 		s.logger.Warn("Failed to get last login", zap.Uint32("uid", uid), zap.Error(err))
-		lastLogin = time.Now()
+		lastLogin = now
 	}
-	if time.Now().Add((time.Hour * 24) * -90).After(lastLogin) {
-		returnExpiry = time.Now().Add(time.Hour * 24 * 30)
+	if now.Add((time.Hour * 24) * -90).After(lastLogin) {
+		returnExpiry := now.Add(time.Hour * 24 * 30)
 		if err := s.userRepo.UpdateReturnExpiry(uid, returnExpiry); err != nil {
 			s.logger.Warn("Failed to update return expiry", zap.Uint32("uid", uid), zap.Error(err))
 		}
-	} else {
-		returnExpiry, err = s.userRepo.GetReturnExpiry(uid)
-		if err != nil {
-			returnExpiry = time.Now()
-			if err := s.userRepo.UpdateReturnExpiry(uid, returnExpiry); err != nil {
-				s.logger.Warn("Failed to update return expiry (fallback)", zap.Uint32("uid", uid), zap.Error(err))
-			}
+		if err := s.userRepo.UpdateLastLogin(uid, now); err != nil {
+			s.logger.Warn("Failed to update last login", zap.Uint32("uid", uid), zap.Error(err))
 		}
+		return returnExpiry
 	}
-	if err := s.userRepo.UpdateLastLogin(uid, time.Now()); err != nil {
+
+	returnExpiry, err := s.userRepo.GetReturnExpiry(uid)
+	if err != nil {
+		s.logger.Warn("Failed to get return expiry", zap.Uint32("uid", uid), zap.Error(err))
+	}
+	if err := s.userRepo.UpdateLastLogin(uid, now); err != nil {
 		s.logger.Warn("Failed to update last login", zap.Uint32("uid", uid), zap.Error(err))
 	}
-	return returnExpiry
+	if returnExpiry != nil && returnExpiry.After(now) {
+		return *returnExpiry
+	}
+	return now
 }
 
 func (s *Server) getLastCID(uid uint32) uint32 {

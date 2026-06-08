@@ -403,7 +403,7 @@ func TestScreenShotGetInvalidToken(t *testing.T) {
 func newTestUserRepo() *mockAPIUserRepo {
 	return &mockAPIUserRepo{
 		lastLogin:    time.Now(),
-		returnExpiry: time.Now().Add(time.Hour * 24 * 30),
+		returnExpiry: timePtr(time.Now().Add(time.Hour * 24 * 30)),
 	}
 }
 
@@ -640,7 +640,7 @@ func BenchmarkNewAuthData(b *testing.B) {
 		erupeConfig: c,
 		userRepo: &mockAPIUserRepo{
 			lastLogin:    time.Now(),
-			returnExpiry: time.Now().Add(time.Hour * 24 * 30),
+			returnExpiry: timePtr(time.Now().Add(time.Hour * 24 * 30)),
 		},
 	}
 
